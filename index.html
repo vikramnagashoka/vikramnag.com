@@ -84,6 +84,8 @@
     box-shadow: 0 18px 50px rgba(60, 50, 30, 0.07);
   }
   .shot { display: block; border-bottom: 1px solid var(--line); }
+  .video-embed { aspect-ratio: 16 / 9; background: #000; }
+  .video-embed iframe { display: block; width: 100%; height: 100%; border: 0; }
   .shot img { display: block; width: 100%; height: auto; }
   .p-body { padding: 30px 34px 32px; }
   .p-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
@@ -154,9 +156,11 @@
 
   <!-- ------------------------------------------------ RosBag Resurrector -->
   <article class="project" id="rosbag">
-    <a class="shot" href="https://youtu.be/AJbH8AntoDU" title="Watch the 2-minute tour">
-      <img src="assets/rosbag-resurrector.jpg" alt="RosBag Resurrector — a notebook for ROS 2 bags" loading="eager">
-    </a>
+    <div class="shot video-embed">
+      <iframe src="https://www.youtube-nocookie.com/embed/AJbH8AntoDU" title="RosBag Resurrector — the 2-minute tour"
+        frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowfullscreen loading="lazy"></iframe>
+    </div>
     <div class="p-body">
       <div class="p-head">
         <h2>RosBag Resurrector</h2>
@@ -220,6 +224,12 @@
       <div class="stack">Live ingestion · MuJoCo replay · evidence tiers · promotion gates · incident narratives</div>
       <div class="p-links">
         <a class="btn primary" href="https://robotfleet.vikramnag.com">Open the live demo — click TOUR</a>
+      </div>
+      <div class="gif-note">Flightdeck walkthrough — 5 minutes, every claim on camera</div>
+      <div class="inline-gif">
+        <video controls preload="none" poster="assets/ground-control.jpg" style="display:block;width:100%;height:auto;">
+          <source src="assets/ground-control-walkthrough.mp4" type="video/mp4">
+        </video>
       </div>
     </div>
   </article>
