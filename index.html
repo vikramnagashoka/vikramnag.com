@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vikram Nag Ashoka — data infrastructure for robotics</title>
+<meta name="description" content="I build the systems that turn robot data into decisions — offline bag analysis to training datasets, and live fleet observability with physics-grounded replay.">
+<meta property="og:title" content="Vikram Nag Ashoka — data infrastructure for robotics">
+<meta property="og:description" content="RosBag Resurrector (open-source bag analysis → ML datasets) and Ground Control (replay-first robot fleet observability).">
+<meta property="og:image" content="https://vikramnag.com/assets/rosbag-resurrector.jpg">
+<meta property="og:url" content="https://vikramnag.com">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%232563c9'/%3E%3Crect x='22' y='22' width='20' height='20' rx='6' fill='%23fffdf9'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --paper: #f7f3ea; --card: #fffdf9; --field: #f1ede4;
+    --ink: #262115; --muted: #6b6457; --faint: #8a7f68;
+    --line: #e3ddcf; --accent: #2563c9;
+    --accent-soft: rgba(37, 99, 201, 0.10);
+    --accent-border: rgba(37, 99, 201, 0.45);
+    --ok: #2f8f5f; --ok-soft: rgba(47, 143, 95, 0.12);
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #191713; --card: #201d18; --field: #262218;
+      --ink: #ece6da; --muted: #a89e8d; --faint: #8a7f68;
+      --line: #363028; --accent: #7aa5ee;
+      --accent-soft: rgba(122, 165, 238, 0.13);
+      --accent-border: rgba(122, 165, 238, 0.45);
+      --ok: #5fbc8f; --ok-soft: rgba(95, 188, 143, 0.14);
+    }
+  }
+  * { margin: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--paper); color: var(--ink);
+    font-family: var(--sans); font-size: 16px; line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ------------------------------------------------------------- hero */
+  header { padding: 88px 0 64px; }
+  .brand-row { display: flex; align-items: center; gap: 14px; margin-bottom: 34px; }
+  .mark {
+    width: 46px; height: 46px; border-radius: 12px; background: var(--accent);
+    display: flex; align-items: center; justify-content: center; flex: 0 0 46px;
+  }
+  .mark span { width: 16px; height: 16px; border-radius: 5px; background: #fffdf9; }
+  .kicker {
+    font-family: var(--mono); font-size: 12.5px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--accent); font-weight: 700;
+  }
+  h1 {
+    font-size: clamp(34px, 6vw, 54px); line-height: 1.06;
+    letter-spacing: -0.022em; font-weight: 800; max-width: 17ch;
+    text-wrap: balance;
+  }
+  .lede { margin-top: 22px; font-size: 18.5px; color: var(--muted); max-width: 58ch; }
+  .lede b { color: var(--ink); font-weight: 600; }
+  .hero-links { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 14.5px; font-weight: 600; padding: 9px 18px;
+    border-radius: 9px; border: 1px solid var(--line);
+    background: var(--card); color: var(--ink);
+  }
+  .btn:hover { border-color: var(--accent-border); text-decoration: none; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fffdf9; }
+  .btn.primary:hover { filter: brightness(1.06); }
+
+  /* ---------------------------------------------------------- projects */
+  .section-label {
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--faint); font-weight: 700;
+    border-bottom: 2px solid var(--ink); padding-bottom: 10px; margin-bottom: 28px;
+  }
+  .project {
+    background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+    overflow: hidden; margin-bottom: 40px;
+    box-shadow: 0 18px 50px rgba(60, 50, 30, 0.07);
+  }
+  .shot { display: block; border-bottom: 1px solid var(--line); }
+  .shot img { display: block; width: 100%; height: auto; }
+  .p-body { padding: 30px 34px 32px; }
+  .p-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+  .p-head h2 { font-size: 25px; letter-spacing: -0.015em; }
+  .tag {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.09em;
+    font-weight: 700; padding: 3px 11px; border-radius: 20px; white-space: nowrap;
+  }
+  .tag.oss { color: var(--ok); background: var(--ok-soft); border: 1px solid var(--ok); }
+  .tag.live { color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-border); }
+  .p-sub { color: var(--muted); font-size: 15.5px; max-width: 62ch; }
+  .p-points { margin: 18px 0 0; padding: 0; list-style: none; display: grid; gap: 9px; }
+  .p-points li { padding-left: 22px; position: relative; font-size: 15px; max-width: 72ch; }
+  .p-points li::before {
+    content: ""; position: absolute; left: 2px; top: 9px;
+    width: 7px; height: 7px; border-radius: 2px; background: var(--accent);
+  }
+  .p-points b { font-weight: 650; }
+  .stack {
+    margin-top: 20px; font-family: var(--mono); font-size: 12px;
+    color: var(--faint); letter-spacing: 0.02em;
+  }
+  .p-links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+  .p-links .btn { font-size: 13.5px; padding: 7px 15px; }
+  .gif-note {
+    display: flex; align-items: center; gap: 10px; margin-top: 26px;
+    font-family: var(--mono); font-size: 11.5px; color: var(--faint);
+    letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .gif-note::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  .inline-gif { margin-top: 12px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .inline-gif img { display: block; width: 100%; height: auto; }
+
+  /* ------------------------------------------------------------ more + footer */
+  .more { color: var(--muted); font-size: 15px; margin-bottom: 72px; }
+  footer {
+    border-top: 1px solid var(--line); padding: 30px 0 56px;
+    display: flex; flex-wrap: wrap; gap: 10px 26px; align-items: baseline;
+    color: var(--faint); font-size: 14px;
+  }
+  footer .spacer { flex: 1; }
+  @media (max-width: 640px) { .p-body { padding: 22px 20px 26px; } header { padding: 60px 0 44px; } }
+</style>
+</head>
+<body>
+
+<header class="wrap">
+  <div class="brand-row">
+    <div class="mark"><span></span></div>
+    <span class="kicker">Vikram Nag Ashoka</span>
+  </div>
+  <h1>Data infrastructure for robots.</h1>
+  <p class="lede">
+    I build the systems that turn robot data into decisions —
+    <b>offline</b>, where recorded sensor logs become analyzable data and training
+    datasets, and <b>online</b>, where live fleets stream policy decisions through
+    physics-grounded replay and observability.
+  </p>
+  <div class="hero-links">
+    <a class="btn primary" href="#rosbag">See the work ↓</a>
+    <a class="btn" href="https://github.com/vikramnagashoka">GitHub</a>
+    <a class="btn" href="mailto:vikramnagashoka@gmail.com">Email</a>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="section-label">Featured projects</div>
+
+  <!-- ------------------------------------------------ RosBag Resurrector -->
+  <article class="project" id="rosbag">
+    <a class="shot" href="https://youtu.be/AJbH8AntoDU" title="Watch the 2-minute tour">
+      <img src="assets/rosbag-resurrector.jpg" alt="RosBag Resurrector — a notebook for ROS 2 bags" loading="eager">
+    </a>
+    <div class="p-body">
+      <div class="p-head">
+        <h2>RosBag Resurrector</h2>
+        <span class="tag oss">OPEN SOURCE · PYPI</span>
+      </div>
+      <p class="p-sub">
+        A pandas-like analysis workbench for ROS 2 (MCAP) bag files — the data platform
+        for what robots already recorded. No ROS installation required.
+      </p>
+      <ul class="p-points">
+        <li><b>Bounded-memory streaming core:</b> chunked CDR decode, running aggregators,
+          and tolerance-bounded sync buffers analyze multi-GB logs with memory bounded by
+          chunk size, not file size — enforced by a dedicated memory-regression CI suite.</li>
+        <li><b>Bags → training data:</b> streaming exporters to 7 analytics/ML formats
+          (Parquet, HDF5, Zarr, <b>LeRobot</b>, <b>RLDS</b>…) with multi-stream time
+          synchronization verified by eager/streaming equivalence tests.</li>
+        <li><b>Data quality as a first-class layer:</b> streaming health checks, declarative
+          bag contracts usable as CI gates, and self-contained incident reports.</li>
+        <li><b>Notebook UI:</b> every capability is a cell — plot, brush a window for a
+          grounded anomaly explanation, free-form Polars queries, cross-run comparison,
+          local CLIP semantic frame search, one-click export.</li>
+      </ul>
+      <div class="stack">Python · Polars · DuckDB · FastAPI · React/TypeScript · MCAP · 800+ tests · 15 releases</div>
+      <div class="p-links">
+        <a class="btn primary" href="https://youtu.be/AJbH8AntoDU">▶ 2-minute tour</a>
+        <a class="btn" href="https://github.com/vikramnagashoka/rosbag-resurrector">GitHub</a>
+        <a class="btn" href="https://pypi.org/project/rosbag-resurrector/">PyPI</a>
+      </div>
+      <div class="gif-note">Semantic search, live — CLIP over real camera frames</div>
+      <div class="inline-gif">
+        <img src="assets/rosbag-search.gif" alt="Typing a natural-language query and CLIP returning matching camera frames from a real bag" loading="lazy">
+      </div>
+    </div>
+  </article>
+
+  <!-- ---------------------------------------------------- Ground Control -->
+  <article class="project" id="ground-control">
+    <a class="shot" href="https://robotfleet.vikramnag.com" title="Open the live demo">
+      <img src="assets/ground-control.jpg" alt="Ground Control — fleet overview panel with live telemetry, annunciator wall, and incident feed" loading="lazy">
+    </a>
+    <div class="p-body">
+      <div class="p-head">
+        <h2>Ground Control</h2>
+        <span class="tag live">LIVE DEMO</span>
+      </div>
+      <p class="p-sub">
+        Replay-first observability for robot fleets: watch a live fleet stream policy
+        decisions, replay any decision through real physics, and see what the policy
+        believed — and what it would have earned.
+      </p>
+      <ul class="p-points">
+        <li><b>Deterministic counterfactual replay:</b> any logged decision re-rolls through
+          closed-loop MuJoCo physics, so "what if" is answered with dynamics, not vibes.</li>
+        <li><b>Evidence-tiered fragility search</b> and <b>physics-gated policy promotion</b> —
+          an improvement flywheel whose gate blocked its own first candidate, reported straight.</li>
+        <li><b>Cognition layer:</b> a Q-ensemble with a calibration-gated kill switch, plus
+          deterministic incident narratives with portable evidence packets.</li>
+        <li><b>Two morphologies, one contract:</b> a Unitree G1 humanoid and a Go1 quadruped
+          run through the same robot-adapter interface — connect your own via the capture daemon.</li>
+      </ul>
+      <div class="stack">Live ingestion · MuJoCo replay · evidence tiers · promotion gates · incident narratives</div>
+      <div class="p-links">
+        <a class="btn primary" href="https://robotfleet.vikramnag.com">Open the live demo — click TOUR</a>
+      </div>
+    </div>
+  </article>
+
+  <p class="more">
+    Earlier work on <a href="https://github.com/vikramnagashoka">GitHub</a> — an
+    <a href="https://github.com/vikramnagashoka/robotlog-agent">LLM agent for robot log analysis</a>,
+    and an archive of autonomous-driving projects (Kalman filters, MPC, path planning,
+    semantic segmentation).
+  </p>
+</main>
+
+<footer class="wrap">
+  <span>Vikram Nag Ashoka</span>
+  <a href="mailto:vikramnagashoka@gmail.com">vikramnagashoka@gmail.com</a>
+  <a href="https://github.com/vikramnagashoka">github.com/vikramnagashoka</a>
+  <span class="spacer"></span>
+  <span>vikramnag.com</span>
+</footer>
+
+</body>
+</html>
