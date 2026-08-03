@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ground Control — architecture &amp; design notes</title>
+<meta name="description" content="How Ground Control is built: evidence tiers, physics-gated promotion, a calibration-gated cognition layer, and a leave-anytime ingest lane. The design notes behind the live demo.">
+<meta property="og:title" content="Ground Control — architecture &amp; design notes">
+<meta property="og:description" content="The system shape, the load-bearing decisions and their tradeoffs, and what I'd do differently.">
+<meta property="og:image" content="https://vikramnag.com/assets/ground-control.jpg">
+<meta property="og:url" content="https://vikramnag.com/ground-control-design.html">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%232563c9'/%3E%3Crect x='22' y='22' width='20' height='20' rx='6' fill='%23fffdf9'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --paper: #f7f3ea; --card: #fffdf9; --field: #f1ede4;
+    --ink: #262115; --muted: #6b6457; --faint: #8a7f68;
+    --line: #e3ddcf; --accent: #2563c9;
+    --accent-soft: rgba(37, 99, 201, 0.10);
+    --accent-border: rgba(37, 99, 201, 0.45);
+    --ok: #2f8f5f; --ok-soft: rgba(47, 143, 95, 0.12);
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #191713; --card: #201d18; --field: #262218;
+      --ink: #ece6da; --muted: #a89e8d; --faint: #8a7f68;
+      --line: #363028; --accent: #7aa5ee;
+      --accent-soft: rgba(122, 165, 238, 0.13);
+      --accent-border: rgba(122, 165, 238, 0.45);
+      --ok: #5fbc8f; --ok-soft: rgba(95, 188, 143, 0.14);
+    }
+  }
+  * { margin: 0; box-sizing: border-box; }
+  body {
+    background: var(--paper); color: var(--ink);
+    font-family: var(--sans); font-size: 16px; line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 0 24px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  header { padding: 64px 0 8px; }
+  .back {
+    font-family: var(--mono); font-size: 12.5px; letter-spacing: 0.06em;
+    color: var(--faint); display: inline-block; margin-bottom: 40px;
+  }
+  .back:hover { color: var(--accent); }
+  .kicker {
+    font-family: var(--mono); font-size: 12.5px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--accent); font-weight: 700;
+    display: block; margin-bottom: 12px;
+  }
+  h1 {
+    font-size: clamp(30px, 5vw, 42px); line-height: 1.08;
+    letter-spacing: -0.02em; font-weight: 800; text-wrap: balance;
+  }
+  .lede { margin-top: 18px; font-size: 17px; color: var(--muted); }
+  .lede b { color: var(--ink); font-weight: 600; }
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px;
+  }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 13.5px; font-weight: 600; padding: 7px 15px;
+    border-radius: 9px; border: 1px solid var(--line);
+    background: var(--card); color: var(--ink);
+  }
+  .btn:hover { border-color: var(--accent-border); text-decoration: none; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fffdf9; }
+  .btn.primary:hover { filter: brightness(1.06); }
+  .private-note {
+    margin-top: 26px; padding: 12px 16px; border: 1px solid var(--line);
+    border-radius: 10px; background: var(--card);
+    font-size: 13.5px; color: var(--muted);
+  }
+
+  main { padding: 40px 0 40px; }
+  h2 {
+    font-family: var(--mono); font-size: 13px; letter-spacing: 0.13em;
+    text-transform: uppercase; color: var(--faint); font-weight: 700;
+    border-bottom: 2px solid var(--ink); padding-bottom: 10px;
+    margin: 52px 0 20px;
+  }
+  main > h2:first-child { margin-top: 8px; }
+  h3 { font-size: 18.5px; letter-spacing: -0.01em; margin: 30px 0 8px; }
+  p { margin: 12px 0; max-width: 68ch; }
+  p b { font-weight: 650; }
+  ol.constraints { margin: 16px 0 0; padding: 0 0 0 22px; display: grid; gap: 12px; }
+  ol.constraints li { max-width: 66ch; }
+  .tradeoff {
+    margin: 14px 0 6px; padding: 10px 16px; border-left: 3px solid var(--accent);
+    background: var(--accent-soft); border-radius: 0 8px 8px 0;
+    font-size: 14.5px; color: var(--muted); max-width: 64ch;
+  }
+  .tradeoff b { color: var(--ink); }
+  code {
+    font-family: var(--mono); font-size: 0.86em; background: var(--field);
+    border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px;
+  }
+  .diagram {
+    margin: 20px 0; border: 1px solid var(--line); border-radius: 12px;
+    background: var(--card); overflow-x: auto;
+  }
+  .diagram pre {
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.5;
+    padding: 20px 22px; color: var(--ink); min-width: 560px;
+  }
+  .diagram .c { color: var(--accent); font-weight: 700; }
+  .diagram .d { color: var(--faint); }
+  ul.numbers { margin: 16px 0 0; padding: 0; list-style: none; display: grid; gap: 9px; }
+  ul.numbers li { padding-left: 22px; position: relative; font-size: 15px; max-width: 70ch; }
+  ul.numbers li::before {
+    content: ""; position: absolute; left: 2px; top: 9px;
+    width: 7px; height: 7px; border-radius: 2px; background: var(--accent);
+  }
+  ul.numbers b { font-weight: 650; }
+
+  footer {
+    border-top: 1px solid var(--line); padding: 28px 0 56px;
+    display: flex; flex-wrap: wrap; gap: 10px 26px; align-items: baseline;
+    color: var(--faint); font-size: 14px;
+  }
+  footer .spacer { flex: 1; }
+  @media (max-width: 640px) { header { padding: 44px 0 4px; } }
+</style>
+</head>
+<body>
+
+<header class="wrap">
+  <a class="back" href="/#ground-control">← vikramnag.com</a>
+  <span class="kicker">Ground Control</span>
+  <h1>Architecture &amp; design notes</h1>
+  <p class="lede">
+    How the replay-first fleet observability platform is built, and why it's built
+    that way: the system shape, the <b>decisions that carry load</b>, and what I'd
+    do differently. A five-minute read to pair with the
+    <a href="https://robotfleet.vikramnag.com">live demo</a>.
+  </p>
+  <div class="meta-row">
+    <a class="btn primary" href="https://robotfleet.vikramnag.com">Open the live demo</a>
+    <a class="btn" href="https://youtu.be/rIldh075dRA">▶ 3-minute walkthrough</a>
+  </div>
+  <div class="private-note">
+    The repository is private while I decide what to open-source, so this page is
+    the public version of its internal architecture docs. Everything described here
+    is running in the live demo and shown in the walkthrough video.
+  </div>
+</header>
+
+<main class="wrap">
+
+  <h2>The problem and its constraints</h2>
+  <p>
+    A robot fleet streams policy decisions all day. When one robot does something
+    strange, "what happened" is usually answered by scrubbing video and guessing.
+    Ground Control's premise is that a logged decision should be a first-class,
+    interrogable object: replay it with a different parameter, reroll it through
+    real physics, search the fleet's history for decisions that are one
+    perturbation away from failing, and gate policy updates on that evidence.
+  </p>
+  <p>Three constraints shaped everything:</p>
+  <ol class="constraints">
+    <li><b>Every claim must carry its evidence.</b> A dashboard that shows a
+      number without saying how it was obtained trains operators to distrust it.
+      Anything the platform asserts is labeled by how it was produced, and the
+      label can only be earned, never assumed.</li>
+    <li><b>One host, deliberately.</b> This is an operator workbench, not a
+      fleet-scale streaming pipeline. One API process, worker processes beside it,
+      one database file. The scale path (brokers, multi-machine ingest) exists as
+      a written appendix in the design docs, not as half-built code.</li>
+    <li><b>Physics is optional at runtime; honesty is not.</b> The MuJoCo assets
+      that power physics rerolls are heavy and stay out of the repo. A fresh
+      clone must still run everything else, self-skip what it can't prove, and
+      say plainly which evidence tier it's operating at.</li>
+  </ol>
+
+  <h2>System shape</h2>
+  <div class="diagram"><pre>
+<span class="d">SOURCES</span>   robot policy decisions
+          <span class="d">ROS2/JSONL · MCAP · live capture daemon (60Hz+, batched)
+          · guest WebSocket lane (bring-your-own-robot)</span>
+              │
+              ▼
+<span class="c">INGEST</span>    schema validation · dedupe · per-decision physics readiness
+              │
+              ▼
+<span class="c">STORE</span>     event store: SQLite (WAL) <span class="d">or</span> Postgres behind one dialect seam
+          decisions · jobs · fragility scans · incidents · promotions
+              │                                │
+              ▼                                ▼
+<span class="c">API</span>       FastAPI · REST +           <span class="c">WORKERS</span>  separate processes:
+          WebSocket (coalesced                 replay · MuJoCo physics
+          ticks, cursor resume)                reroll · policy analysis
+              │                                │ claim → execute → report
+              ▼                                ▼
+<span class="c">FLIGHTDECK</span> operator UI               <span class="c">ARTIFACTS</span> renders · comparisons
+          14 panels, guided tour              · manifests on disk
+  </pre></div>
+  <p>
+    One mental model: <b>the database is the coordination layer.</b> The API and
+    every worker are separate OS processes that share only the store and the
+    artifact tree. Workers claim jobs, execute, and report through the store's
+    durable-job tables, with a watchdog that abandons stuck handlers. There is no
+    message bus to operate, and any piece can be restarted independently.
+  </p>
+
+  <h2>The decisions that carry load</h2>
+
+  <h3>1. Evidence tiers are the type system of the product</h3>
+  <p>
+    Every result is tagged with one of three tiers: <code>policy_only</code>
+    (what the policy would have chosen), <code>physics_reroll</code> (the
+    counterfactual actually ran through closed-loop MuJoCo), or
+    <code>physics_validated</code> (the reroll also passed baseline-parity
+    checks). The vocabulary lives in a single module, a label-parity test keeps
+    the UI, reports, and narratives using identical wording, and nothing anywhere
+    may present a lower tier as a higher one. Fragility search is built on the
+    same idea: a cheap policy-only pre-rank chooses candidates, physics rerolls
+    confirm them, and results are ranked by the tier of proof they achieved.
+  </p>
+  <div class="tradeoff"><b>Tradeoff:</b> the honest label is sometimes the boring
+    one — a fresh install without physics assets reports policy-only results and
+    says so. That restraint is the product: the demo never claims more than it
+    can prove on the machine it's running on.</div>
+
+  <h3>2. The replay surface can't overpromise</h3>
+  <p>
+    Whether a decision <i>can</i> be replayed — and at which tier — is answered by
+    one shared pre-flight resolver: capability checks, the badges on every
+    decision list, and replay execution itself all ask the same code, so the UI
+    can never offer a replay the engine would refuse. A parity test sweeps every
+    replay parameter against every artifact state to keep that promise from
+    drifting as either side evolves.
+  </p>
+
+  <h3>3. The promotion gate has no allegiance</h3>
+  <p>
+    The improvement flywheel closes the loop: fragility findings compile into
+    evaluation suites, a candidate policy is retrained against them, and a
+    promotion gate rerolls <b>both</b> baseline and candidate through physics
+    before the candidate may ship. The system's own first retrained candidate was
+    <b>blocked by its own gate</b> — the physics evidence didn't clear the bar,
+    and the committed validation report says exactly that. Reporting that
+    straight, rather than tuning the gate until it passed, is what makes the gate
+    worth anything.
+  </p>
+
+  <h3>4. The cognition layer had to earn its switch</h3>
+  <p>
+    The platform estimates what each decision was worth via a distilled
+    Q-ensemble. The numbers are labeled <code>q_proxy_return</code>, never
+    "confidence"; every Q bundle is bound to the policy it was distilled from
+    (a mismatched policy gets a typed refusal, not a stale score); and the whole
+    layer sits behind a calibration verdict. It's enabled today because a
+    calibration gauntlet earned it: per-state ranking hit 0.607 top-1 accuracy
+    against a 0.20 random baseline, and an 18-of-20 physics cross-check agreed
+    (p&nbsp;=&nbsp;0.0002). If a future verdict fails, the UI visibly drops to
+    distribution-only status with the reason shown — a kill switch that
+    explains itself.
+  </p>
+
+  <h3>5. Leave-anytime ingest</h3>
+  <p>
+    The bring-your-own-robot lane was designed backwards from the exit. Guests
+    mint scoped tokens (stored as hashes, capped robots, message and byte
+    budgets, 72-hour TTL) and stream over a WebSocket with per-batch
+    acknowledgements and honest drop counters. Revoke is never blocked by rate
+    budgets, severs live streams server-side, and can purge every row the guest
+    ever sent — with server-verified counts as the receipt. The client is a real
+    package — <a href="https://pypi.org/project/robot-fleet-connect/"><code>pip install robot-fleet-connect</code></a> —
+    and it vendors the platform's mapping core byte-for-byte, with CI failing
+    if the two copies drift.
+  </p>
+
+  <h3>6. Docs with a tripwire</h3>
+  <p>
+    The internal architecture doc is canonical: a claims-to-evidence table maps
+    every product claim to the code that implements it, the test that pins it,
+    and the validation artifact that demonstrates it — and a doc-parity script
+    fails CI when any pointer rots. The same discipline shapes the incident
+    narratives the platform exports: deterministic templates over stored
+    evidence, with refusal-by-construction for anything the evidence doesn't
+    support. No LLM in the loop, so a narrative can be trusted verbatim.
+  </p>
+
+  <h2>Numbers that keep it honest</h2>
+  <ul class="numbers">
+    <li><b>560+ tests</b>, and a machine without the heavy physics assets still
+      passes 420+ of them with zero failures — asset-dependent tests self-skip
+      and say why.</li>
+    <li><b>Two robot morphologies, one adapter contract:</b> a Unitree G1
+      humanoid and a Go1 quadruped run the same capture → replay → reroll →
+      promotion workflows.</li>
+    <li><b>Dual-engine store:</b> the full suite runs green on both SQLite and
+      Postgres in CI, behind one dialect seam.</li>
+    <li><b>Live spine:</b> capture batching at 60Hz+, WebSocket fan-out as
+      250ms coalesced ticks with cursor-based resume after disconnects.</li>
+    <li><b>Every claim on camera:</b> scripted walkthrough videos regenerate the
+      UI evidence after each phase, and the
+      <a href="https://youtu.be/rIldh075dRA">3-minute public walkthrough</a> shows
+      the real system end to end.</li>
+  </ul>
+
+  <h2>What I'd do differently</h2>
+  <p>
+    <b>The store's dialect seam came late.</b> SQLite-first was right for a
+    single-host tool, but the Postgres seam was retrofitted after the store had
+    grown a dozen table families — building the seam earlier would have made
+    that a non-event.
+  </p>
+  <p>
+    <b>Vanilla JS is reaching its ceiling.</b> The no-build-step SPA kept
+    iteration instant across fourteen panels, but the panel-to-panel contracts
+    now live in my head. The next structural investment is types.
+  </p>
+  <p>
+    <b>Naming is archaeology.</b> The core package still carries the name of the
+    phase that created it, several phases ago. Harmless, but every new reader
+    asks the same question, and renames get more expensive every week.
+  </p>
+  <p>
+    <b>The first-clone wow moment needs assets.</b> Keeping MuJoCo assets out of
+    the repo is correct hygiene, but it means the most impressive tier is the one
+    a fresh clone can't produce. Committed physics recordings — real MP4s
+    replayed exact-match without inflating the evidence tier — recover most of
+    it, and were designed for exactly this reason.
+  </p>
+
+</main>
+
+<footer class="wrap">
+  <span>Vikram Nag Ashoka</span>
+  <a href="/">vikramnag.com</a>
+  <a href="mailto:vikramnagashoka@gmail.com">email</a>
+  <span class="spacer"></span>
+  <a href="https://robotfleet.vikramnag.com">live demo</a>
+</footer>
+
+</body>
+</html>
