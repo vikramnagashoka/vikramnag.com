@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RosBag Resurrector — challenges, decisions, learnings</title>
+<meta name="description" content="The transparent build log of RosBag Resurrector: what broke on the way from first commit to v0.8, the decisions each incident forced, and the lessons worth keeping.">
+<meta property="og:title" content="RosBag Resurrector — challenges, decisions, learnings">
+<meta property="og:description" content="Twelve stories from idea to v0.8: shipped bugs, honesty debts, rewrites, and the CI jobs each one left behind.">
+<meta property="og:image" content="https://vikramnag.com/assets/rosbag-resurrector.jpg">
+<meta property="og:url" content="https://vikramnag.com/rosbag-learnings.html">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%232563c9'/%3E%3Crect x='22' y='22' width='20' height='20' rx='6' fill='%23fffdf9'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --paper: #f7f3ea; --card: #fffdf9; --field: #f1ede4;
+    --ink: #262115; --muted: #6b6457; --faint: #8a7f68;
+    --line: #e3ddcf; --accent: #2563c9;
+    --accent-soft: rgba(37, 99, 201, 0.10);
+    --accent-border: rgba(37, 99, 201, 0.45);
+    --ok: #2f8f5f; --ok-soft: rgba(47, 143, 95, 0.12);
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #191713; --card: #201d18; --field: #262218;
+      --ink: #ece6da; --muted: #a89e8d; --faint: #8a7f68;
+      --line: #363028; --accent: #7aa5ee;
+      --accent-soft: rgba(122, 165, 238, 0.13);
+      --accent-border: rgba(122, 165, 238, 0.45);
+      --ok: #5fbc8f; --ok-soft: rgba(95, 188, 143, 0.14);
+    }
+  }
+  * { margin: 0; box-sizing: border-box; }
+  body {
+    background: var(--paper); color: var(--ink);
+    font-family: var(--sans); font-size: 16px; line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 0 24px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  header { padding: 64px 0 8px; }
+  .back {
+    font-family: var(--mono); font-size: 12.5px; letter-spacing: 0.06em;
+    color: var(--faint); display: inline-block; margin-bottom: 40px;
+  }
+  .back:hover { color: var(--accent); }
+  .kicker {
+    font-family: var(--mono); font-size: 12.5px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--accent); font-weight: 700;
+    display: block; margin-bottom: 12px;
+  }
+  h1 {
+    font-size: clamp(30px, 5vw, 42px); line-height: 1.08;
+    letter-spacing: -0.02em; font-weight: 800; text-wrap: balance;
+  }
+  .lede { margin-top: 18px; font-size: 17px; color: var(--muted); }
+  .lede b { color: var(--ink); font-weight: 600; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 13.5px; font-weight: 600; padding: 7px 15px;
+    border-radius: 9px; border: 1px solid var(--line);
+    background: var(--card); color: var(--ink);
+  }
+  .btn:hover { border-color: var(--accent-border); text-decoration: none; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fffdf9; }
+  .btn.primary:hover { filter: brightness(1.06); }
+
+  main { padding: 40px 0 40px; }
+  h2 {
+    font-family: var(--mono); font-size: 13px; letter-spacing: 0.13em;
+    text-transform: uppercase; color: var(--faint); font-weight: 700;
+    border-bottom: 2px solid var(--ink); padding-bottom: 10px;
+    margin: 52px 0 20px;
+  }
+  main > h2:first-child { margin-top: 8px; }
+  h3 { font-size: 18.5px; letter-spacing: -0.01em; margin: 34px 0 8px; }
+  p { margin: 12px 0; max-width: 68ch; }
+  p b { font-weight: 650; }
+  code {
+    font-family: var(--mono); font-size: 0.86em; background: var(--field);
+    border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px;
+  }
+  .lesson {
+    margin: 14px 0 6px; padding: 10px 16px; border-left: 3px solid var(--accent);
+    background: var(--accent-soft); border-radius: 0 8px 8px 0;
+    font-size: 14.5px; color: var(--muted); max-width: 64ch;
+  }
+  .lesson b { color: var(--ink); }
+  .timeline {
+    margin: 20px 0; border: 1px solid var(--line); border-radius: 12px;
+    background: var(--card); overflow-x: auto;
+  }
+  .timeline table {
+    border-collapse: collapse; font-family: var(--mono); font-size: 12.5px;
+    line-height: 1.5; margin: 16px 20px; min-width: 480px;
+  }
+  .timeline td { padding: 3px 0; vertical-align: top; }
+  .timeline td:first-child {
+    color: var(--accent); font-weight: 700; white-space: nowrap; padding-right: 18px;
+  }
+  .timeline td:last-child { color: var(--muted); }
+  ul.meta-lessons { margin: 16px 0 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+  ul.meta-lessons li { padding-left: 22px; position: relative; font-size: 15px; max-width: 70ch; }
+  ul.meta-lessons li::before {
+    content: ""; position: absolute; left: 2px; top: 9px;
+    width: 7px; height: 7px; border-radius: 2px; background: var(--accent);
+  }
+  ul.meta-lessons b { font-weight: 650; }
+
+  footer {
+    border-top: 1px solid var(--line); padding: 28px 0 56px;
+    display: flex; flex-wrap: wrap; gap: 10px 26px; align-items: baseline;
+    color: var(--faint); font-size: 14px;
+  }
+  footer .spacer { flex: 1; }
+  @media (max-width: 640px) { header { padding: 44px 0 4px; } }
+</style>
+</head>
+<body>
+
+<header class="wrap">
+  <a class="back" href="/#rosbag">← vikramnag.com</a>
+  <span class="kicker">RosBag Resurrector</span>
+  <h1>Challenges, decisions, learnings</h1>
+  <p class="lede">
+    The transparent build log: what broke on the way from first commit to v0.8,
+    the decision each incident forced, and the lessons worth keeping.
+    The <a href="rosbag-architecture.html">architecture notes</a>
+    describe how the system is built — this page is <b>what it cost to learn</b>.
+    An eight-minute read.
+  </p>
+  <div class="meta-row">
+    <a class="btn primary" href="https://youtu.be/Fz10BoFqa0E">▶ 2-minute tour</a>
+    <a class="btn" href="https://github.com/vikramnagashoka/rosbag-resurrector">GitHub</a>
+    <a class="btn" href="https://github.com/vikramnagashoka/rosbag-resurrector/blob/main/CHANGELOG.md">Full changelog</a>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <h2>The arc</h2>
+  <div class="timeline"><table>
+    <tr><td>Feb 2026</td><td>v0.1 — internal preview: MCAP parsing, BagFrame prototype</td></tr>
+    <tr><td>Mar 2026</td><td>v0.2.0 — first public release, 164 tests</td></tr>
+    <tr><td>Apr 2026</td><td>v0.2.1 → v0.4.2 — the reliability &amp; honesty arc</td></tr>
+    <tr><td>May 2026</td><td>v0.5 → v0.6.2 — 3D scene, custom types, the e2e harness</td></tr>
+    <tr><td>Jun 2026</td><td>v0.7.x — six "10x" features, two of them demand-validated</td></tr>
+    <tr><td>Jul 2026</td><td>v0.8.x — the notebook UI rebuild</td></tr>
+    <tr><td>Oct 2026</td><td>v0.8.4 → v0.8.7 — four releases in nine days, mostly export correctness</td></tr>
+    <tr><td>Today</td><td>19 releases · 1,799 backend + 101 unit + 63 e2e tests</td></tr>
+  </table></div>
+
+  <h2>Twelve stories</h2>
+
+  <h3>1. Picking a lane meant naming who's better</h3>
+  <p>
+    The first scoping decision was about what <i>not</i> to build. Foxglove is
+    excellent at 3D visualization; PlotJuggler is excellent at fast plotting;
+    competing there would have meant losing slowly. The lane that was actually
+    empty: treating a recorded bag as a queryable dataset — health checks, sync,
+    ML export, search — with no ROS install. Even so, early comparison claims
+    overreached, an internal review flagged them as expectation risk, and the
+    README's comparison table got tightened release by release.
+  </p>
+  <div class="lesson"><b>Lesson:</b> respect for competitors is a positioning
+    feature. Narrow claims survive contact with experts; broad ones cost the
+    credibility the honest claims earned.</div>
+
+  <h3>2. The "lazy" that wasn't and the "sha256" that wasn't</h3>
+  <p>
+    Two early names lied. <code>to_lazy_polars()</code> materialized every chunk
+    before returning — fixed once to be genuinely lazy, then removed entirely in
+    v0.4.0 when it turned out to leak a temp file per call (the replacement,
+    <code>materialize_ipc_cache()</code>, has an explicit lifecycle — the
+    project's only breaking change to date). And <code>_compute_sha256</code>
+    hashed only the first megabyte: fine as a change-detection fingerprint,
+    dishonest as a SHA. The rename to <code>fingerprint</code> (with opt-in
+    <code>--full-hash</code> for a real digest) required renaming a database
+    column on users' machines — which forced building the forward-only
+    migration framework the index still runs on today.
+  </p>
+  <div class="lesson"><b>Lesson:</b> a misnamed abstraction is borrowed
+    credibility. Repaying it cost a breaking change and a migration framework —
+    still cheaper than a user discovering the lie first.</div>
+
+  <h3>3. The wheel that worked on my machine</h3>
+  <p>
+    v0.3.2, the project's first true shipped-broken release: <code>resurrector
+    demo</code> crashed on every PyPI install with
+    <code>ModuleNotFoundError: No module named 'tests'</code>. The demo-bag
+    generator lived under <code>tests/fixtures/</code>, which doesn't ship in
+    the wheel — so every from-source check passed while every real user's first
+    command failed. The fix moved the generator into the package; the real fix
+    was a new CI job that builds the wheel, installs it into a fresh venv, and
+    runs the smoke suite against <i>that</i>.
+  </p>
+  <div class="lesson"><b>Lesson:</b> test the artifact you ship, not the
+    checkout you develop in. The gap between them is exactly where
+    first-impression bugs live.</div>
+
+  <h3>4. The flagship feature was broken on every install</h3>
+  <p>
+    v0.4.1: semantic frame search — the headline demo — raised a DuckDB type
+    error on <i>every</i> query, on every install, because two parameters were
+    passed in the wrong order. A test existed that would have caught it. It
+    never ran: it was gated behind <code>importorskip("sentence_transformers")</code>
+    and CI never installed the <code>[vision]</code> extra (avoiding a 2&nbsp;GB
+    model download), so the test silently skipped for weeks. The fix added
+    SQL-level tests with synthetic embeddings, plus an <code>extras-test</code>
+    CI matrix that installs every optional extra and runs the suite under each.
+  </p>
+  <div class="lesson"><b>Lesson:</b> a permanently-skipped test is
+    indistinguishable from no test — worse, it reads as coverage. CI has to
+    install what users install.</div>
+
+  <h3>5. The OOM reckoning</h3>
+  <p>
+    Real bags are bigger than RAM, and the early code paths quietly assumed
+    they weren't. v0.4.0 was a release with zero new features: health checks,
+    density, plotting, and sync were all rewritten from
+    accumulate-then-compute into running state — Welford accumulators, bin
+    counters, bounded lookahead buffers. The contract ("memory is bounded by
+    chunk size, not bag size") went into the README, and a memory-regression
+    suite now measures peak RSS in CI and fails if any hot path regresses.
+    The two places the rule genuinely can't hold got typed errors that name
+    the limit and the alternative instead of a silent warning nobody reads.
+  </p>
+  <div class="lesson"><b>Lesson:</b> a performance promise without a test is
+    marketing. Writing the contract down — with its enforcement and its honest
+    exceptions — is what made "works on the demo bag" and "works on the 100GB
+    bag" the same claim.</div>
+
+  <h3>6. Two sync engines, one truth</h3>
+  <p>
+    The streaming rewrite left sync with two implementations behind one API:
+    eager (vectorized, fastest under 1M messages) and streaming (bounded
+    buffers, unbounded bags). Two engines invite silent drift, so the test
+    suite runs both against nine timing-pathology fixture bags and asserts
+    identical output — which surfaced real subtleties, like tie-breaking on
+    equidistant samples. Best gotcha: MCAP readers return messages time-sorted
+    even when written out of order, so the out-of-order policies couldn't be
+    tested through a fixture bag at all — they're tested at the row-iterator
+    level with a fake view that regresses timestamps on purpose.
+  </p>
+  <div class="lesson"><b>Lesson:</b> a second implementation is a correctness
+    risk until you make the two verify each other. And sometimes the test
+    harness, not the feature, is the design problem.</div>
+
+  <h3>7. 717 green tests and a broken product</h3>
+  <p>
+    By v0.6.0 the backend suite was over 700 tests and users were still hitting
+    a toast that said <code>play: [object Object]</code>, a playback engine
+    that sprinted through messages after resume, and an opaque 500 on the
+    search page. None of those live where backend tests look. v0.6.1 added a
+    Playwright harness driving a real browser against a hermetic dashboard —
+    and every e2e spec is annotated with the bug it would have caught. One trap
+    worth passing on: <code>--update-snapshots</code> only rewrites <i>failing</i>
+    visual baselines, so a stale-but-within-tolerance baseline survives
+    "regenerate everything" — delete the file first.
+  </p>
+  <div class="lesson"><b>Lesson:</b> backend-green is not product-works. Every
+    user-visible bug gets its regression test in the layer the user actually
+    touched, or the class of bug returns.</div>
+
+  <h3>8. The error message is the product</h3>
+  <p>
+    The heavy dependencies — CLIP, TensorFlow, rclpy — live behind pip extras,
+    which means the most common failure mode is "feature not installed." The
+    v0.6.1 answer was a capability registry: one endpoint probes what's
+    importable, and every surface renders the same honest state — available, or
+    an install banner with a copy-paste command. Then reality kept teaching:
+    the printed command failed on zsh (macOS's default shell) until every
+    install string was quoted, and v0.8.3 moved the search cell's check
+    <i>before</i> the input, because typing a query just to learn the extra is
+    missing is its own small betrayal.
+  </p>
+  <div class="lesson"><b>Lesson:</b> for a first-run user, the failure surface
+    is the product. "The tool told me exactly what to install" and "the tool
+    feels broken" are the same 30 seconds, decided by an error message.</div>
+
+  <h3>9. Strangers set the roadmap</h3>
+  <p>
+    The best features weren't planned. A ROS Discourse question about custom
+    message types became v0.6's pluggable decoder registry, and a
+    promise made in that public reply ("if that's a common pattern I'll promote
+    it to first-class") became <code>concatenate_bags()</code>. Outreach
+    replies asking "can it hand me an incident report?" and "can it gate CI?"
+    became v0.7.1's report generator and bag contracts — both labeled
+    demand-validated in the changelog because they came from users, not the
+    roadmap.
+  </p>
+  <div class="lesson"><b>Lesson:</b> a public reply is a commitment with a
+    deadline. Building what a real person asked for, while the ask is warm,
+    beats building what the roadmap imagined.</div>
+
+  <h3>10. Rebuilding the front door without closing the old one</h3>
+  <p>
+    An internal usability review in April was blunt: capability 8.5/10, UI
+    maturity 5/10, discoverability 5.5/10. The dashboard was a page per
+    feature, and features users didn't find might as well not exist. The v0.8
+    answer was a rebuild around one rule — every capability is a cell in a
+    notebook feed, sharing a command palette, a linked time cursor, and inline
+    guides. The rebuild shipped as slices: the classic UI stayed fully
+    reachable at <code>/classic</code>, cells landed one release at a time,
+    and the default route flipped only when the notebook covered everything.
+    The e2e suite tripled in the same release the routes swapped.
+  </p>
+  <div class="lesson"><b>Lesson:</b> big rewrites land as a sequence of
+    shippable slices with a reversible switch. The old door stays open until
+    the new one provably covers it.</div>
+
+  <h3>11. The demo recording that kept dying at 20 seconds</h3>
+  <p>
+    The v0.8 demo videos are recorded by a Playwright harness driving the real
+    app. One night every scene started truncating at exactly ~20 seconds —
+    because macOS's temp cleaner had deleted the demo environment <i>under the
+    running server</i>, the bag list came back empty, and every scene timed out
+    on its first selector. The failure was invisible for an hour because the
+    recorder's output was piped through <code>tail -1</code>. Recording demos
+    also found real product bugs — v0.8.1 exists because the camera never lies
+    about a cell silently appearing below the fold.
+  </p>
+  <div class="lesson"><b>Lesson:</b> a demo recording is a usability test that
+    pays twice. Also: nothing durable lives in <code>/tmp</code>, and never
+    pipe away the stderr of your own tooling.</div>
+
+  <h3>12. Solo, with guardrails</h3>
+  <p>
+    This is a nights-and-weekends project built solo, pairing heavily with AI
+    coding agents — which changed what discipline means. Branch protection is
+    turned on against myself; every release runs the same gate (full backend,
+    unit, and e2e suites, then a clean-venv install smoke); the visual
+    baselines have a human gate before every tag. The repo's
+    <code>CLAUDE.md</code> conventions file became the standing brief that
+    keeps every working session — human or machine — honest about the memory
+    contract, the migration rules, and what never gets committed. The
+    deliberately-not-done list is written down too, so deferring stays a
+    decision instead of a drift.
+  </p>
+  <div class="lesson"><b>Lesson:</b> you-at-11pm is a new contributor. Write
+    the contracts where every future session reads them, and let CI — not
+    memory — hold the line.</div>
+
+  <h2>If I keep only five</h2>
+  <ul class="meta-lessons">
+    <li><b>CI is scar tissue.</b> Every job names an incident: wheel-smoke
+      (the broken PyPI wheel), extras-test (the always-skipped test),
+      memory-regression (the OOM contract), e2e (the [object Object] toast).
+      The pipeline is the project's honest autobiography.</li>
+    <li><b>Honesty compounds into architecture.</b> One uncomfortable rename
+      forced the migration framework; the "what's installed" question became
+      the capability registry; "explain this window" was built grounded-by-construction.
+      Each honest fix left infrastructure the next feature stood on.</li>
+    <li><b>Ship artifacts that travel.</b> The features that spread the tool
+      aren't screens — they're a HuggingFace dataset page, a self-contained
+      incident report dropped into Slack, a contract YAML in a repo. Output
+      that moves between people is a distribution channel.</li>
+    <li><b>The error path is the product.</b> Most first sessions hit a
+      missing extra, an unindexed bag, or a legacy format within minutes.
+      Guided failure — the exact command, copy button included — is the
+      difference between a retained user and a closed tab.</li>
+    <li><b>Test where the user lives.</b> 164 backend tests became 1,799 and it
+      still took a browser harness to make the product trustworthy. Each layer
+      of testing bought a different class of sleep.</li>
+  </ul>
+
+</main>
+
+<footer class="wrap">
+  <span>Vikram Nag Ashoka</span>
+  <a href="/">vikramnag.com</a>
+  <a href="mailto:vikramnagashoka92@gmail.com">email</a>
+  <span class="spacer"></span>
+  <a href="https://github.com/vikramnagashoka/rosbag-resurrector">github.com/vikramnagashoka/rosbag-resurrector</a>
+</footer>
+
+</body>
+</html>
